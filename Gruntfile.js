@@ -56,7 +56,6 @@ var admincss = [
 var frontendcss = [
 	'modules/carousel/jetpack-carousel.css',
 	'modules/contact-form/css/grunion.css',
-	'modules/gplus-authorship/style.css',
 	'modules/infinite-scroll/infinity.css',
 	'modules/likes/style.css',
 	'modules/related-posts/related-posts.css',
@@ -67,7 +66,7 @@ var frontendcss = [
 	'modules/tiled-gallery/tiled-gallery/tiled-gallery.css',
 	'modules/widgets/wordpress-post-widget/style.css',
 	'modules/widgets/gravatar-profile.css',
-	'modules/widgets/widget-grid-and-list.css',
+	'modules/widgets/top-posts/style.css',
 	'modules/widgets/widgets.css' // TODO Moved to image-widget/style.css
 ];
 
@@ -86,6 +85,22 @@ module.exports = function(grunt) {
 				command: 'php tools/build-module-headings-translations.php',
 				options: {
 					stdout: true
+				}
+			}
+		},
+		search: {
+			// The __DIR__ constant isn't available in PHP 5.2, so we can't use it yet.
+			DIR: {
+				files: {
+					src: [
+						'*.php',
+						'**/*.php'
+					]
+				},
+				options: {
+					searchString: '__DIR__',
+					logFormat:    'console',
+					failOnMatch:  true
 				}
 			}
 		},
@@ -237,7 +252,11 @@ module.exports = function(grunt) {
 				ext: '-rtl.css',
 				src: [
 					'css/jetpack.css',
-					'!css/jetpack-rtl.css'
+					'modules/theme-tools/compat/*.css',
+					'modules/infinite-scroll/themes/twentyfifteen.css',
+					'!css/jetpack-rtl.css',
+					'!modules/theme-tools/compat/*-rtl.css',
+					'!modules/infinite-scroll/themes/twentyfifteen-rtl.css'
 				]
 			},
 			adminModules: {
@@ -418,6 +437,7 @@ module.exports = function(grunt) {
 	grunt.loadNpmTasks('grunt-notify');
 	grunt.loadNpmTasks('grunt-contrib-concat');
 	grunt.loadNpmTasks('grunt-contrib-cssmin');
+	grunt.loadNpmTasks('grunt-search');
 
 	grunt.registerTask('default', [
 		// CSS
@@ -429,6 +449,7 @@ module.exports = function(grunt) {
 
 		// Precommit stuff
 		'shell',
+		'search:DIR',
 		'phplint',
 		'jshint',
 
@@ -446,6 +467,7 @@ module.exports = function(grunt) {
 
 		// Precommit stuff
 		'shell',
+		'search:DIR',
 		'phplint',
 		'jshint'
 	]);

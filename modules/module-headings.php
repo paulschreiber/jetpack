@@ -36,10 +36,6 @@ _x( 'Customize your site’s CSS without modifying your theme.', 'Module Descrip
 _x( 'Enhanced Distribution', 'Module Name', 'jetpack' );
 _x( 'Share your public posts and comments to search engines and other services.', 'Module Description', 'jetpack' );
 
-// modules/gplus-authorship.php
-_x( 'Google+ Profile', 'Module Name', 'jetpack' );
-_x( 'Give users the ability to share posts to Google+, and add your site link to your Google+ profile.', 'Module Description', 'jetpack' );
-
 // modules/gravatar-hovercards.php
 _x( 'Gravatar Hovercards', 'Module Name', 'jetpack' );
 _x( 'Enable pop-up business cards over commenters’ Gravatars.', 'Module Description', 'jetpack' );
@@ -66,7 +62,7 @@ _x( 'Write posts or pages in plain-text Markdown syntax.', 'Module Description',
 
 // modules/minileven.php
 _x( 'Mobile Theme', 'Module Name', 'jetpack' );
-_x( 'Optimize your site with a mobile-friendly theme for tablets and phones.', 'Module Description', 'jetpack' );
+_x( 'Optimize your site with a mobile-friendly theme for smartphones.', 'Module Description', 'jetpack' );
 
 // modules/monitor.php
 _x( 'Monitor', 'Module Name', 'jetpack' );
@@ -110,7 +106,7 @@ _x( 'Enable WP.me-powered shortlinks for all posts and pages.', 'Module Descript
 
 // modules/site-icon.php
 _x( 'Site Icon', 'Module Name', 'jetpack' );
-_x( 'Add an site icon to your site.', 'Module Description', 'jetpack' );
+_x( 'Add a site icon to your site.', 'Module Description', 'jetpack' );
 
 // modules/sso.php
 _x( 'Jetpack Single Sign On', 'Module Name', 'jetpack' );
@@ -138,7 +134,7 @@ _x( 'Verify your site or domain with Google Webmaster Tools, Pinterest, and othe
 
 // modules/videopress.php
 _x( 'VideoPress', 'Module Name', 'jetpack' );
-_x( 'Upload and host video right on your site. (Subscription required.)', 'Module Description', 'jetpack' );
+_x( 'Upload and embed videos right on your site. (Subscription required.)', 'Module Description', 'jetpack' );
 
 // modules/widget-visibility.php
 _x( 'Widget Visibility', 'Module Name', 'jetpack' );
@@ -147,3 +143,65 @@ _x( 'Specify which widgets appear on which pages of your site.', 'Module Descrip
 // modules/widgets.php
 _x( 'Extra Sidebar Widgets', 'Module Name', 'jetpack' );
 _x( 'Add images, Twitter streams, your site’s RSS links, and more to your sidebar.', 'Module Description', 'jetpack' );
+
+// Modules with `Other` tag:
+//  - modules/contact-form.php
+//  - modules/notes.php
+//  - modules/site-icon.php
+_x( 'Other', 'Module Tag', 'jetpack' );
+
+// Modules with `Writing` tag:
+//  - modules/after-the-deadline.php
+//  - modules/custom-content-types.php
+//  - modules/enhanced-distribution.php
+//  - modules/json-api.php
+//  - modules/latex.php
+//  - modules/markdown.php
+//  - modules/post-by-email.php
+//  - modules/shortcodes.php
+_x( 'Writing', 'Module Tag', 'jetpack' );
+
+// Modules with `Photos and Videos` tag:
+//  - modules/carousel.php
+//  - modules/photon.php
+//  - modules/shortcodes.php
+//  - modules/tiled-gallery.php
+//  - modules/videopress.php
+_x( 'Photos and Videos', 'Module Tag', 'jetpack' );
+
+// Modules with `Social` tag:
+//  - modules/comments.php
+//  - modules/gravatar-hovercards.php
+//  - modules/likes.php
+//  - modules/publicize.php
+//  - modules/sharedaddy.php
+//  - modules/shortcodes.php
+//  - modules/shortlinks.php
+//  - modules/subscriptions.php
+//  - modules/widgets.php
+_x( 'Social', 'Module Tag', 'jetpack' );
+
+// Modules with `Appearance` tag:
+//  - modules/custom-css.php
+//  - modules/gravatar-hovercards.php
+//  - modules/infinite-scroll.php
+//  - modules/minileven.php
+//  - modules/photon.php
+//  - modules/shortcodes.php
+//  - modules/widget-visibility.php
+//  - modules/widgets.php
+_x( 'Appearance', 'Module Tag', 'jetpack' );
+
+// Modules with `Developers` tag:
+//  - modules/json-api.php
+//  - modules/omnisearch.php
+//  - modules/sso.php
+_x( 'Developers', 'Module Tag', 'jetpack' );
+
+// Modules with `Mobile` tag:
+//  - modules/minileven.php
+_x( 'Mobile', 'Module Tag', 'jetpack' );
+
+// Modules with `WordPress.com Stats` tag:
+//  - modules/stats.php
+_x( 'WordPress.com Stats', 'Module Tag', 'jetpack' );

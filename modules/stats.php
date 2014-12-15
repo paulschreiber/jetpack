@@ -250,7 +250,7 @@ function stats_array( $kvs ) {
  * Admin Pages
  */
 function stats_admin_menu() {
-        global $pagenow;
+	global $pagenow;
 
 	// If we're at an old Stats URL, redirect to the new one.
 	// Don't even bother with caps, menu_page_url(), etc.  Just do it.
@@ -1032,7 +1032,7 @@ function stats_print_wp_remote_error( $get, $url ) {
 	<pre>
 	User Agent: "<?php echo esc_html( $_SERVER['HTTP_USER_AGENT'] ); ?>"
 	Page URL: "http<?php echo (is_ssl()?'s':'') . '://' . esc_html( $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'] ); ?>"
-	API URL: "<?php echo clean_url( $url ); ?>"
+	API URL: "<?php echo esc_url( $url ); ?>"
 <?php
 	if ( is_wp_error( $get ) ) {
 		foreach ( $get->get_error_codes() as $code ) {

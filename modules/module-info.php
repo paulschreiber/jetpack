@@ -474,18 +474,19 @@ function jetpack_contact_form_learn_more_button() {
 }
 
 function jetpack_contact_form_more_info() {
-    echo '<div class="jp-info-img">';
-    echo '<a href="http://support.wordpress.com/contact-form/">';
-    echo '<img class="jp-info-img" src="' . plugins_url( basename( dirname( dirname( __FILE__ ) ) ) . '/images/screenshots/contactform.png' ) . '" alt="' . esc_attr__( 'Contact Form', 'jetpack' ) . '" width="300" height="150" />';
-    echo '</a>';
-    echo '</div>';
+	echo '<div class="jp-info-img">';
+	echo '<a href="http://support.wordpress.com/contact-form/">';
+	echo '<img class="jp-info-img" src="' . plugins_url( basename( dirname( dirname( __FILE__ ) ) ) . '/images/screenshots/contactform.png' ) . '" alt="' . esc_attr__( 'Contact Form', 'jetpack' ) . '" width="300" height="150" />';
+	echo '</a>';
+	echo '</div>';
 
-    echo '<p>';
-    _e( 'A contact form is a great way to offer your readers the ability to get in touch, without giving out your personal email address.', 'jetpack' );
-    echo '</p>';
+	echo '<p>';
+	_e( 'A contact form is a great way to offer your readers the ability to get in touch, without giving out your personal email address.', 'jetpack' );
+	echo '</p>';
 
-    echo '<p>';    _e( 'Each contact form can easily be customized to fit your needs. When a user submits your contact form, the feedback will be filtered through <a href="http://akismet.com/">Akismet</a> (if it is active on your site) to make sure it’s not spam. Any legitimate feedback will then be emailed to you, and added to your feedback management area.', 'jetpack' );
-    echo '</p>';
+	echo '<p>';
+	_e( 'Each contact form can easily be customized to fit your needs. When a user submits your contact form, the feedback will be filtered through <a href="http://akismet.com/">Akismet</a> (if it is active on your site) to make sure it’s not spam. Any legitimate feedback will then be emailed to you, and added to your feedback management area.', 'jetpack' );
+	echo '</p>';
 }
 
 add_action( 'jetpack_learn_more_button_contact-form', 'jetpack_contact_form_learn_more_button' );
@@ -524,7 +525,7 @@ add_action( 'jetpack_module_more_info_connected_comments', 'jetpack_comments_mor
 
 // Gallery Carousel: START
 function jetpack_carousel_learn_more_button() {
-    echo '<a class="button-secondary more-info-link" href="#">' . __( 'Learn More', 'jetpack' ) . '</a>';
+	echo '<a class="button-secondary more-info-link" href="#">' . __( 'Learn More', 'jetpack' ) . '</a>';
 }
 
 function jetpack_carousel_more_info() {
@@ -533,7 +534,7 @@ function jetpack_carousel_more_info() {
 		<img class="jp-info-img" src="<?php echo plugins_url( basename( dirname( dirname( __FILE__ ) ) ) . '/images/screenshots/carousel.png' ) ?>" alt="<?php esc_attr_e( 'Gallery Carousel Screenshot', 'jetpack' ) ?>" width="300" height="188" />
 	</div>
 
-    <p><?php esc_html_e( 'With Carousel active, any standard WordPress galleries you have embedded in posts or pages will launch a gorgeous full-screen photo browsing experience with comments and EXIF metadata.', 'jetpack' ); ?></p>
+	<p><?php esc_html_e( 'With Carousel active, any standard WordPress galleries you have embedded in posts or pages will launch a gorgeous full-screen photo browsing experience with comments and EXIF metadata.', 'jetpack' ); ?></p>
 <?php
 }
 
@@ -726,30 +727,6 @@ function jetpack_likes_more_link() {
 add_action( 'jetpack_learn_more_button_likes', 'jetpack_likes_more_link' );
 // Likes: STOP
 
-// Google+ Profile: START
-function jetpack_gplus_authorship_more_info() { ?>
-
-	<div class="jp-info-img">
-		<a href="http://jetpack.me/support/google-plus/">
-			<img class="jp-info-img" src="<?php echo plugins_url( basename( dirname( dirname( __FILE__ ) ) ) . '/images/screenshots/google-plus.png' ) ?>" alt="<?php esc_attr_e( 'Google+ Profile', 'jetpack' ) ?>" width="350" height="33" />
-		</a>
-	</div>
-
-	<p><?php esc_html_e( 'The Google+ profile module allows you to connect your blog and Google+ accounts.', 'jetpack' ) ?></p>
-	<p><?php esc_html_e( 'Displayed below your posts will be a link back to your Google+ profile and a Google+ follow button. A link will also be added to your Google+ profile.', 'jetpack' ); ?></p>
-
-	<p>&rarr; <a href="http://jetpack.me/support/google-plus/"><?php esc_html_e( 'More information on using Google+ Profile.', 'jetpack' ); ?></a></p>
-
-<?php
-}
-add_action( 'jetpack_module_more_info_gplus-authorship', 'jetpack_gplus_authorship_more_info' );
-
-function jetpack_gplus_authorship_more_link() {
-	echo '<a class="button-secondary more-info-link" href="#">' . __( 'Learn More', 'jetpack' ) . '</a>';
-}
-add_action( 'jetpack_learn_more_button_gplus-authorship', 'jetpack_gplus_authorship_more_link' );
-// Google+ Profile: STOP
-
 // Omnisearch: START
 function jetpack_omnisearch_more_info() {
 	?>
@@ -793,7 +770,11 @@ add_action( 'jetpack_learn_more_button_widget-visibility', 'jetpack_widget_visib
 // VideoPress: START
 function jetpack_videopress_more_info() {
 	?>
-	<p><?php _e( 'With the VideoPress module you can easily upload videos to your WordPress site and embed them in your posts and pages. This module requires a WordPress.com account with an active <a href="http://store.wordpress.com/premium-upgrades/videopress/" target="_blank">VideoPress subscription</a>.', 'jetpack' ); ?></p>
+	<p><?php printf(
+		__( 'With the VideoPress module you can easily upload videos to your WordPress site and embed them in your posts and pages. This module requires a WordPress.com account with an active <a href="%1$s" target="_blank">VideoPress subscription</a>. Once you have purchased a VideoPress subscription, <a href="%1$s">click here to configure VideoPress</a>.', 'jetpack' ),
+		'http://store.wordpress.com/premium-upgrades/videopress/',
+		Jetpack::admin_url( 'page=jetpack&configure=videopress' )
+	); ?></p>
 	<?php
 }
 add_action( 'jetpack_module_more_info_videopress', 'jetpack_videopress_more_info' );
@@ -946,7 +927,8 @@ function jetpack_custom_site_icon() { ?>
 		<img class="jp-info-img" src="<?php echo plugins_url( basename( dirname( dirname( __FILE__ ) ) ) . '/images/screenshots/site-icon.png' ) ?>" alt="<?php esc_attr_e( 'Site Icon', 'jetpack' ) ?>" width="300" height="150" />
 	</div>
 
-	<p><?php esc_html_e( 'Site Icon lets you create an icon for your site which is displayed as a favicon.', 'jetpack' ); ?></p>
+	<p><?php esc_html_e( 'Site Icon lets you create an icon for your site. This icon will be used as favicon, mobile icon, and Tile on Windows 8 computers.', 'jetpack' ); ?></p>
+	<p><?php printf( __( 'To add a new icon to your site, head over to <a href="%s">Settings &rarr; General &rarr; Site Icon</a>, and upload an icon.', 'jetpack' ), admin_url( 'options-general.php#site-icon' ) ); ?></p>
 
 <?php
 }

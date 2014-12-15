@@ -1,33 +1,27 @@
 <?php
 
-class Jetpack_JSON_API_Core_Update_Endpoint extends Jetpack_JSON_API_Endpoint {
-
+class Jetpack_JSON_API_Core_Modify_Endpoint extends Jetpack_JSON_API_Core_Endpoint {
+	// POST /sites/%s/core
 	// POST /sites/%s/core/update
-	public function callback( $path = '', $blog_id = 0 ) {
+	protected $needed_capabilities = 'update_core';
+	protected $action              = 'default_action';
+	protected $new_version;
+	protected $log;
 
+	public function default_action() {
+		$args = $this->input();
 
-		if ( is_wp_error( $error = $this->validate_call( $blog_id, 'update_core' ) ) ) {
-			return $error;
+		if ( isset( $args['autoupdate'] ) && is_bool( $args['autoupdate'] ) ) {
+			Jetpack_Options::update_option( 'autoupdate_core', $args['autoupdate'] );
 		}
 
-		include_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+		return true;
+	}
 
+	private function update( $version, $locale ) {
 		$args = $this->input();
 		$version    = isset( $args['version'] ) ? $args['version'] : false;
 		$locale     = isset( $args['locale'] ) ? $args['locale'] : get_locale();
-
-		if ( is_wp_error( $error = $this->update_core( $version, $locale ) ) ) {
-			return $error;
-		}
-
-		global $wp_version;
-		return array(
-			'version' => $wp_version,
-			'log'     => $this->log,
-		);
-	}
-
-	private function update_core( $version, $locale ) {
 
 		include_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
@@ -37,20 +31,24 @@ class Jetpack_JSON_API_Core_Update_Endpoint extends Jetpack_JSON_API_Endpoint {
 		if ( $version ) {
 			$update = find_core_update( $version, $locale );
 		} else {
-			$update = $this->find_latest_core_version();
+			$update = $this->find_latest_update_offer();
 		}
 
 		$skin     = new Automatic_Upgrader_Skin();
 		$upgrader = new Core_Upgrader( $skin );
 
-		$result   = $upgrader->upgrade( $update );
+		$this->new_version = $upgrader->upgrade( $update );
 
 		$this->log = $upgrader->skin->get_upgrade_messages();
 
-		return $result;
+		if ( is_wp_error( $this->new_version ) ) {
+			return $this->new_version;
+		}
+
+		return $this->new_version;
 	}
 
-	private function find_latest_core_version() {
+	protected function find_latest_update_offer() {
 		// Select the latest update.
 		// Remove filters to bypass automattic updates.
 		add_filter( 'request_filesystem_credentials',      '__return_true'  );

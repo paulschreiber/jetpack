@@ -111,13 +111,11 @@ class Jetpack_Twitter_Cards {
 		return '@' . preg_replace( '/^@/', '', $str );
 	}
 
-	static function prioritize_creator_over_default_site( $site_tag, $og_tags ) {
-		if ( ! empty($og_tags['twitter:creator']) && ( '@wordpressdotcom' == $site_tag || '@jetpack' == $site_tag ) ) {
-			$twitter_site = $og_tags['twitter:creator'];
-		} else {
-			$twitter_site = $site_tag;
+	static function prioritize_creator_over_default_site( $site_tag, $og_tags = array() ) {
+		if ( ! empty( $og_tags['twitter:creator'] ) && in_array( $site_tag, array( '@wordpressdotcom', '@jetpack' ) ) ) {
+			$site_tag = $og_tags['twitter:creator'];
 		}
-		return $twitter_site;
+		return $site_tag;
 	}
 
 	static function twitter_cards_define_type_based_on_image_count( $og_tags, $extract ) {
@@ -125,6 +123,7 @@ class Jetpack_Twitter_Cards {
 		$img_count = $extract['count']['image'];
 
 		if ( empty( $img_count ) ) {
+
 			// No images, use Blavatar as a thumbnail for the summary type.
 			if ( function_exists('blavatar_domain') ) {
 				$blavatar_domain = blavatar_domain( site_url() );
@@ -132,7 +131,19 @@ class Jetpack_Twitter_Cards {
 					$og_tags['twitter:image'] = blavatar_url( $blavatar_domain, 'img', 240 );
 				}
 			}
+
+			// Second fall back, Site Logo
+			if ( empty( $og_tags['twitter:image'] ) && ( function_exists( 'jetpack_has_site_logo' ) && jetpack_has_site_logo() ) ) {
+				$og_tags['twitter:image'] = jetpack_get_site_logo( 'url' );
+			}
+
+			// Third fall back, Site Icon
+			if ( empty( $og_tags['twitter:image'] ) && ( function_exists( 'jetpack_has_site_icon' ) && jetpack_has_site_icon() ) ) {
+				$og_tags['twitter:image'] = jetpack_site_icon_url( null, '240' );
+			}
+
 			// Not falling back on Gravatar, because there's no way to know if we end up with an auto-generated one.
+
 		} elseif ( 1 == $img_count && ( 'image' == $extract['type'] || 'gallery' == $extract['type'] ) ) {
 			// 1 image = photo
 			// Test for $extract['type'] to limit to image and gallery, so we don't send a potential fallback image like a Gravatar as a photo post.
@@ -208,7 +219,7 @@ class Jetpack_Twitter_Cards {
 		add_filter( 'jetpack_open_graph_tags',        array( __CLASS__, 'twitter_cards_tags' ) );
 		add_filter( 'jetpack_open_graph_output',      array( __CLASS__, 'twitter_cards_output' ) );
 		add_filter( 'jetpack_twitter_cards_site_tag', array( __CLASS__, 'site_tag' ), -99 );
-		add_filter( 'jetpack_twitter_cards_site_tag', array( __CLASS__, 'prioritize_creator_over_default_site' ), 99 );
+		add_filter( 'jetpack_twitter_cards_site_tag', array( __CLASS__, 'prioritize_creator_over_default_site' ), 99, 2 );
 		add_action( 'admin_init',                     array( __CLASS__, 'settings_init' ) );
 		add_action( 'sharing_global_options',         array( __CLASS__, 'sharing_global_options' ) );
 		add_action( 'sharing_admin_update',           array( __CLASS__, 'settings_validate' ) );
@@ -216,4 +227,3 @@ class Jetpack_Twitter_Cards {
 }
 
 Jetpack_Twitter_Cards::init();
-

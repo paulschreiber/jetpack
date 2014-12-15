@@ -2,7 +2,7 @@
 
 /**
  * Module Name: Mobile Theme
- * Module Description: Optimize your site with a mobile-friendly theme for tablets and phones.
+ * Module Description: Optimize your site with a mobile-friendly theme for smartphones.
  * Sort Order: 21
  * First Introduced: 1.8
  * Requires Connection: No
@@ -20,9 +20,9 @@ function jetpack_load_minileven() {
 add_action( 'jetpack_modules_loaded', 'minileven_loaded' );
 
 function minileven_loaded() {
-        Jetpack::enable_module_configurable( __FILE__ );
-        Jetpack::module_configuration_load( __FILE__, 'minileven_configuration_load' );
-        Jetpack::module_configuration_screen( __FILE__, 'minileven_configuration_screen' );
+	Jetpack::enable_module_configurable( __FILE__ );
+	Jetpack::module_configuration_load( __FILE__, 'minileven_configuration_load' );
+	Jetpack::module_configuration_screen( __FILE__, 'minileven_configuration_screen' );
 }
 
 function minileven_configuration_load() {
