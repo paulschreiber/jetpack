@@ -87,37 +87,71 @@ class iCalendarReader {
 	protected function filter_past_and_recurring_events( $events ) {
 		$upcoming = array();
 		$set_recurring_events = array();
-		$current = time();
+		$recurrences = array();
+		/**
+		 * This filter allows any time to be passed in for testing or changing timezones, etc...
+		 *
+		 * @module widgets
+		 * 
+		 * @since 3.4.0
+		 *
+		 * @param object time() A time object.
+		 */
+		$current = apply_filters( 'ical_get_current_time', time() );
 
 		foreach ( $events as $event ) {
 
 			$date_from_ics = strtotime( $event['DTSTART'] );
-
-			if ( isset( $event['RRULE'] ) && $this->timezone->getName() && 8 != strlen( $event['DTSTART'] ) ) {
-				$adjusted_time = new DateTime( $event['DTSTART'], new DateTimeZone('UTC') );
-				$adjusted_time->setTimeZone( new DateTimeZone( $this->timezone->getName() ) );
-				$event['DTSTART'] = $adjusted_time->format('Ymd\THis');
-
-				$adjusted_time = new DateTime( $event['DTEND'], new DateTimeZone('UTC') );
-				$adjusted_time->setTimeZone( new DateTimeZone( $this->timezone->getName() ) );
-				$event['DTEND'] = $adjusted_time->format('Ymd\THis');
+			if ( isset( $event['DTEND'] ) ) {
+				$duration = strtotime( $event['DTEND'] ) - strtotime( $event['DTSTART'] );
+			} else {
+				$duration = 0;
 			}
 
-			if ( ! isset( $event['DTSTART'] ) )
+			if ( isset( $event['RRULE'] ) && $this->timezone->getName() && 8 != strlen( $event['DTSTART'] ) ) {
+				try {
+					$adjusted_time = new DateTime( $event['DTSTART'], new DateTimeZone('UTC') );
+					$adjusted_time->setTimeZone( new DateTimeZone( $this->timezone->getName() ) );
+					$event['DTSTART'] = $adjusted_time->format('Ymd\THis');
+					$date_from_ics = strtotime( $event['DTSTART'] );
+
+					$event['DTEND'] = date( 'Ymd\THis', strtotime( $event['DTSTART'] ) + $duration );
+				} catch ( Exception $e ) {
+					// Invalid argument to DateTime
+				}
+
+				if ( isset( $event['EXDATE'] ) ) {
+					$exdates = array();
+					foreach ( (array) $event['EXDATE'] as $exdate ) {
+						try {
+							$adjusted_time = new DateTime( $exdate, new DateTimeZone('UTC') );
+							$adjusted_time->setTimeZone( new DateTimeZone( $this->timezone->getName() ) );
+							if ( 8 == strlen( $event['DTSTART'] ) ) {
+								$exdates[] = $adjusted_time->format( 'Ymd' );
+							} else {
+								$exdates[] = $adjusted_time->format( 'Ymd\THis' );
+							}
+						} catch ( Exception $e ) {
+							// Invalid argument to DateTime
+						}
+					}
+					$event['EXDATE'] = $exdates;
+				} else {
+					$event['EXDATE'] = array();
+				}
+			}
+
+			if ( ! isset( $event['DTSTART'] ) ) {
 				continue;
+			}
 
-			// use end time if it's there
-			$time = ( isset( $event['DTEND'] ) ) ? $event['DTEND'] : $event['DTSTART'];
-			$end = strtotime( $time );
-
-			// process events with RRULE before other events
-
+			// Process events with RRULE before other events
 			$rrule = isset( $event['RRULE'] ) ? $event['RRULE'] : false ;
 			$uid = $event['UID'];
 
 			if ( $rrule && ! in_array( $uid, $set_recurring_events ) ) {
 
-				// break down the RRULE into digestible chunks
+				// Break down the RRULE into digestible chunks
 				$rrule_array = array();
 
 				foreach ( explode( ";", $event['RRULE'] ) as $rline ) {
@@ -125,104 +159,141 @@ class iCalendarReader {
 					$rrule_array[$rkey] = $rvalue;
 				}
 
+				$interval = ( isset( $rrule_array['INTERVAL'] ) ) ? $rrule_array['INTERVAL'] : 1;
+				$rrule_count = ( isset( $rrule_array['COUNT'] ) ) ? $rrule_array['COUNT'] : 0;
+				$until = ( isset( $rrule_array['UNTIL'] ) ) ? strtotime( $rrule_array['UNTIL'] ) : strtotime( '+1 year', $current );
+
+				// Used to bound event checks
+				$echo_limit = 10;
+				$noop = false;
+
+				// Set bydays for the event
+				$weekdays = array( 'SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA' );
+				$bydays = $weekdays;
+
+				// Calculate a recent start date for incrementing depending on the frequency and interval
 				switch ( $rrule_array['FREQ'] ) {
 
 					case 'DAILY':
 						$frequency = 'day';
+						$echo_limit = 10;
+
 						if ( $date_from_ics >= $current ) {
-							$echo_limit = 10;
-							if ( 8 == strlen( $event['DTSTART'] ) ) {
-								$recurring_event_date_start = date( "Ymd", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = date( "Ymd", strtotime( $event['DTEND'] ) );
-							} else {
-								$recurring_event_date_start = date( "Ymd\THis", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = date( "Ymd\THis", strtotime( $event['DTEND'] ) );
-							}
+							$recurring_event_date_start = date( 'Ymd\THis', strtotime( $event['DTSTART'] ) );
 						} else {
-							$echo_limit = 10;
-							$current_date = date( 'Ymd' );
-							if ( 8 == strlen( $event['DTSTART'] ) ) {
-								$recurring_event_date_start = $current_date;
-								$recurring_event_date_end = $current_date;
+							// Interval and count
+							$catchup = floor( ( $current - strtotime( $event['DTSTART'] ) ) / ( $interval * DAY_IN_SECONDS ) );
+							if ( $rrule_count && $catchup > 0 ) {
+								if ( $catchup < $rrule_count ) {
+									$rrule_count = $rrule_count - $catchup;
+									$recurring_event_date_start = date( 'Ymd', strtotime( '+ ' . ( $interval * $catchup ) . ' days', strtotime( $event['DTSTART'] ) ) ) . date( '\THis', strtotime( $event['DTSTART'] ) );
+								} else {
+									$noop = true;
+								}
 							} else {
-								$recurring_event_date_start = $current_date . date( "\THis", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = $current_date . date( "\THis", strtotime( $event['DTEND'] ) );
+								$recurring_event_date_start = date( 'Ymd', strtotime( '+ ' . ( $interval * $catchup ) . ' days', strtotime( $event['DTSTART'] ) ) ) . date( '\THis', strtotime( $event['DTSTART'] ) );
 							}
 						}
 						break;
 
 					case 'WEEKLY':
 						$frequency = 'week';
+						$echo_limit = 4;
+
+						// BYDAY exception to current date
+						$day = false;
+						if ( ! isset( $rrule_array['BYDAY'] ) ) {
+							$day = $rrule_array['BYDAY'] = strtoupper( substr( date( 'D', strtotime( $event['DTSTART'] ) ), 0, 2 ) );
+						}
+						$bydays = explode( ',', $rrule_array['BYDAY'] );
+
 						if ( $date_from_ics >= $current ) {
-							$echo_limit = 2;
-							if ( 8 == strlen( $event['DTSTART'] ) ) {
-								$recurring_event_date_start = date( "Ymd", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = date( "Ymd", strtotime( $event['DTEND'] ) );
-							} else {
-								$recurring_event_date_start = date( "Ymd\THis", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = date( "Ymd\THis", strtotime( $event['DTEND'] ) );
-							}
+							$recurring_event_date_start = date( 'Ymd\THis', strtotime( $event['DTSTART'] ) );
 						} else {
-							$echo_limit = 3;
-							$current_date = date( 'Ym' );
-							if ( 8 == strlen( $event['DTSTART'] ) ) {
-								$recurring_event_date_start = date( "d", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = date( "d", strtotime( $event['DTEND'] ) );
+							// Interval and count
+							$catchup = floor( ( $current - strtotime( $event['DTSTART'] ) ) / ( $interval * WEEK_IN_SECONDS ) );
+							if ( $rrule_count && $catchup > 0 ) {
+								if ( ( $catchup * count( $bydays ) ) < $rrule_count ) {
+									$rrule_count = $rrule_count - ( $catchup * count( $bydays ) ); // Estimate current event count
+									$recurring_event_date_start = date( 'Ymd', strtotime( '+ ' . ( $interval * $catchup ) . ' weeks', strtotime( $event['DTSTART'] ) ) ) . date( '\THis', strtotime( $event['DTSTART'] ) );
+								} else {
+									$noop = true;
+								}
 							} else {
-								$recurring_event_date_start = $current_date . date( "d\THis", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = $current_date . date( "d\THis", strtotime( $event['DTEND'] ) );
+								$recurring_event_date_start = date( 'Ymd', strtotime( '+ ' . ( $interval * $catchup ) . ' weeks', strtotime( $event['DTSTART'] ) ) ) . date( '\THis', strtotime( $event['DTSTART'] ) );
 							}
 						}
 
-						// Build list of days of week to add events
-						$weekdays = array( 'SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA' );
-						$bydays = ( isset( $rrule_array['BYDAY'] ) && $rrule_array['BYDAY'] != '' ) ? explode( ',', $rrule_array['BYDAY'] ) : $weekdays;
+						// Set to Sunday start
+						if ( ! $noop && 'SU' !== strtoupper( substr( date( 'D', strtotime( $recurring_event_date_start ) ), 0, 2 ) ) ) {
+							$recurring_event_date_start = date( 'Ymd', strtotime( "last Sunday", strtotime( $recurring_event_date_start ) ) ) . date( '\THis', strtotime( $event['DTSTART'] ) );
+						}
 						break;
 
 					case 'MONTHLY':
 						$frequency = 'month';
+						$echo_limit = 1;
+
 						if ( $date_from_ics >= $current ) {
-							$echo_limit = 1;
-							if ( 8 == strlen( $event['DTSTART'] ) ) {
-								$recurring_event_date_start = date( "Ymd", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = date( "Ymd", strtotime( $event['DTEND'] ) );
-							} else {
-								$recurring_event_date_start = date( "Ymd\THis", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = date( "Ymd\THis", strtotime( $event['DTEND'] ) );
-							}
+							$recurring_event_date_start = date( 'Ymd\THis', strtotime( $event['DTSTART'] ) );
 						} else {
-							$echo_limit = 2;
-							$current_date = date( 'Ym' );
-							if ( 8 == strlen( $event['DTSTART'] ) ) {
-								$recurring_event_date_start = date( "d", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = date( "d", strtotime( $event['DTEND'] ) );
+							// Describe the date in the month
+							if ( isset( $rrule_array['BYDAY'] ) ) {
+								$day_number = substr( $rrule_array['BYDAY'], 0, 1 );
+								$week_day = substr( $rrule_array['BYDAY'], 1 );
+								$day_cardinals = array( 1 => 'first', 2 => 'second', 3 => 'third', 4 => 'fourth', 5 => 'fifth' );
+								$weekdays = array( 'SU' => 'Sunday', 'MO' => 'Monday', 'TU' => 'Tuesday', 'WE' => 'Wednesday', 'TH' => 'Thursday', 'FR' => 'Friday', 'SA' => 'Saturday' );
+								$event_date_desc = "{$day_cardinals[$day_number]} {$weekdays[$week_day]} of ";
 							} else {
-								$recurring_event_date_start = $current_date . date( "d\THis", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = $current_date . date( "d\THis", strtotime( $event['DTEND'] ) );
+								$event_date_desc = date( 'd ', strtotime( $event['DTSTART'] ) );
+							}
+
+							// Interval only
+							if ( $interval > 1 ) {
+								$catchup = 0;
+								$maybe = strtotime( $event['DTSTART'] );
+								while ( $maybe < $current ) {
+									$maybe = strtotime( '+ ' . ( $interval * $catchup ) . ' months', strtotime( $event['DTSTART'] ) );
+									$catchup++;
+								}
+								$recurring_event_date_start = date( 'Ymd', strtotime( $event_date_desc . date( 'F Y', strtotime( '+ ' . ( $interval * ( $catchup - 1 ) ) . ' months', strtotime( $event['DTSTART'] ) ) ) ) ) . date( '\THis', strtotime( $event['DTSTART'] ) );
+							} else {
+								$recurring_event_date_start = date( 'Ymd', strtotime( $event_date_desc . date( 'F Y', $current ) ) ) . date( '\THis', strtotime( $event['DTSTART'] ) );
+							}
+
+							// Add one interval if necessary
+							if ( strtotime( $recurring_event_date_start ) < $current ) {
+								if ( $interval > 1 ) {
+									$recurring_event_date_start = date( 'Ymd', strtotime( $event_date_desc . date( 'F Y', strtotime( '+ ' . ( $interval * $catchup ) . ' months', strtotime( $event['DTSTART'] ) ) ) ) ) . date( '\THis', strtotime( $event['DTSTART'] ) );
+								} else {
+									try {
+										$adjustment = new DateTime( date( 'Y-m-d', $current ) );
+										$adjustment->modify( 'first day of next month' );
+										$recurring_event_date_start = date( 'Ymd', strtotime( $event_date_desc . $adjustment->format( 'F Y' ) ) ) . date( '\THis', strtotime( $event['DTSTART'] ) );
+									} catch ( Exception $e ) {
+										// Invalid argument to DateTime
+									}
+								}
 							}
 						}
 						break;
 
 					case 'YEARLY':
 						$frequency = 'year';
+						$echo_limit = 1;
+
 						if ( $date_from_ics >= $current ) {
-							$echo_limit = 1;
-							if ( 8 == strlen( $event['DTSTART'] ) ) {
-								$recurring_event_date_start = date( "Ymd", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = date( "Ymd", strtotime( $event['DTEND'] ) );
-							} else {
-								$recurring_event_date_start = date( "Ymd\THis", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = date( "Ymd\THis", strtotime( $event['DTEND'] ) );
-							}
+							$recurring_event_date_start = date( "Ymd\THis", strtotime( $event['DTSTART'] ) );
 						} else {
-							$echo_limit = 1;
-							$current_date = date( 'Y' );
-							if ( 8 == strlen( $event['DTSTART'] ) ) {
-								$recurring_event_date_start = date( "md", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = date( "md", strtotime( $event['DTEND'] ) );
-							} else {
-								$recurring_event_date_start = $current_date . date( "md\THis", strtotime( $event['DTSTART'] ) );
-								$recurring_event_date_end = $current_date . date( "md\THis", strtotime( $event['DTEND'] ) );
+							$recurring_event_date_start = date( 'Y', $current ) . date( "md\THis", strtotime( $event['DTSTART'] ) );
+							if ( strtotime( $recurring_event_date_start ) < $current ) {
+								try {
+									$next = new DateTime( date( 'Y-m-d', $current ) );
+									$next->modify( 'first day of next year' );
+									$recurring_event_date_start = $next->format( 'Y' ) . date ( 'md\THis', strtotime( $event['DTSTART'] ) );
+								} catch ( Exception $e ) {
+									// Invalid argument to DateTime
+								}
 							}
 						}
 						break;
@@ -231,165 +302,123 @@ class iCalendarReader {
 						$frequency = false;
 				}
 
-				if ( isset( $rrule_array['COUNT'] ) ) {
-					$rrule_count = $rrule_array['COUNT'];
-					$echo_limit = 50;
-				}
-
-				if ( $frequency !== false ) {
-
-					$interval = ( isset( $rrule_array['INTERVAL'] ) ) ? $rrule_array['INTERVAL'] : 1;
+				if ( $frequency !== false && ! $noop ) {
 					$count_counter = 1;
 
-					for ( $i = 1; $i <= $echo_limit; $i++ ) {
-						if ( isset( $rrule_array['COUNT'] ) && $i === 1 ) {
-							$recurring_event_date_start = date( "Ymd\THis", strtotime( $event['DTSTART'] ) );
-							$recurring_event_date_end = date( "Ymd\THis", strtotime( $event['DTEND'] ) );
-						} elseif ( $i === 1 ) {
-							// variables set in switch above
-							$rrule_count = 10;
-						} else {
-							$recurring_event_date_start = date( "Ymd\THis", strtotime( $event['DTSTART'] . '+' . $interval . ' ' . $frequency . 's' ) );
-							$recurring_event_date_end = date( "Ymd\THis", strtotime( $event['DTEND'] . '+' . $interval . ' ' . $frequency . 's' ) );
-						}
-						$event_start = strtotime( $recurring_event_date_start );
-						$event_end = strtotime( $recurring_event_date_end );
-						$until = ( isset( $rrule_array['UNTIL'] ) ) ? strtotime( $rrule_array['UNTIL'] ) : strtotime( '+1 year' );
-						$exdate = ( isset( $event['EXDATE;VALUE=DATE'] ) ) ? $event['EXDATE;VALUE=DATE'] : null;
+					// If no COUNT limit, go to 10
+					if ( empty( $rrule_count ) ) {
+						$rrule_count = 10;
+					}
 
-						if ( isset( $rrule_array['BYDAY'] ) && $frequency === 'week' ) {
-							if ( $rrule_array['BYDAY'] === "SU" ) {
-								if ( 8 == strlen( $event['DTSTART'] ) ) {
-									$byday_event_date_start = date( "Ymd", strtotime( "last Sunday", strtotime( $recurring_event_date_start ) ) );
-									$byday_event_date_end = date( "Ymd", strtotime( "last Sunday", strtotime( $recurring_event_date_start ) ) );
-								} else {
-									$byday_event_date_start = date( "Ymd\T", strtotime( "last Sunday", strtotime( $recurring_event_date_start ) ) ) . date( "His", strtotime( $recurring_event_date_start) );
-									$byday_event_date_end = date( "Ymd\T", strtotime( "last Sunday", strtotime( $recurring_event_date_end ) ) ) . date( "His", strtotime( $recurring_event_date_end) );
-								}
-							} else {
-								if ( 8 == strlen( $event['DTSTART'] ) ) {
-									$byday_event_date_start = date( "Ymd", strtotime( "last Sunday", strtotime( $recurring_event_date_start ) ) );
-									$byday_event_date_end = date( "Ymd", strtotime( "last Sunday", strtotime( $recurring_event_date_end ) ) );
-								} else {
-									$byday_event_date_start = date( "Ymd\T", strtotime( "last Sunday", strtotime( $recurring_event_date_start ) ) ) . date( "His", strtotime( $recurring_event_date_start) );
-									$byday_event_date_end = date( "Ymd\T", strtotime( "last Sunday", strtotime( $recurring_event_date_end ) ) ) . date( "His", strtotime( $recurring_event_date_end) );
-								}
-							}
-							$byday_event_start = strtotime( $byday_event_date_start );
-							$byday_event_end = strtotime( $byday_event_date_end );
+					// Set up EXDATE handling for the event
+					$exdates = ( isset( $event['EXDATE'] ) ) ? $event['EXDATE'] : array();
+
+					for ( $i = 1; $i <= $echo_limit; $i++ ) {
+
+						// Weeks need a daily loop and must check for inclusion in BYDAYS
+						if ( 'week' == $frequency ) {
+							$byday_event_date_start = strtotime( $recurring_event_date_start );
 
 							foreach ( $weekdays as $day ) {
-								// Check if day should be added
-								if ( in_array( $day, $bydays ) && $byday_event_end >= $current && $byday_event_end <= $until && $count_counter <= $rrule_count && $byday_event_start >= $date_from_ics && $byday_event_date_start != $exdate ) {
 
-									// Add event to day
-									$event['DTSTART'] = $byday_event_date_start;
-									$event['DTEND'] = $byday_event_date_end;
+								$event_start_timestamp = $byday_event_date_start;
+								$start_time = date( 'His', $event_start_timestamp );
+								$event_end_timestamp = $event_start_timestamp + $duration;
+								$end_time = date( 'His', $event_end_timestamp );
+								if ( 8 == strlen( $event['DTSTART'] ) ) {
+									$exdate_compare = date( 'Ymd', $event_start_timestamp );
+								} else {
+									$exdate_compare = date( 'Ymd\THis', $event_start_timestamp );
+								}
 
+								if ( in_array( $day, $bydays ) && $event_end_timestamp > $current && $event_start_timestamp < $until && $count_counter <= $rrule_count && $event_start_timestamp >= $date_from_ics && ! in_array( $exdate_compare, $exdates ) ) {
+									if ( 8 == strlen( $event['DTSTART'] ) ) {
+										$event['DTSTART'] = date( 'Ymd', $event_start_timestamp );
+										$event['DTEND'] = date( 'Ymd', $event_end_timestamp );
+									} else {
+										$event['DTSTART'] = date( 'Ymd\THis', $event_start_timestamp );
+										$event['DTEND'] = date( 'Ymd\THis', $event_end_timestamp );
+									}
 									if ( $this->timezone->getName() && 8 != strlen( $event['DTSTART'] ) ) {
+										try {
+											$adjusted_time = new DateTime( $event['DTSTART'], new DateTimeZone( $this->timezone->getName() ) );
+											$adjusted_time->setTimeZone( new DateTimeZone( 'UTC' ) );
+											$event['DTSTART'] = $adjusted_time->format('Ymd\THis');
+
+											$event['DTEND'] = date( 'Ymd\THis', strtotime( $event['DTSTART'] ) + $duration );
+										} catch ( Exception $e ) {
+											// Invalid argument to DateTime
+										}
+									}
+									$upcoming[] = $event;
+									$count_counter++;
+								}
+
+								// Move forward one day
+								$byday_event_date_start = strtotime( date( 'Ymd\T', strtotime( '+ 1 day', $event_start_timestamp ) ) . $start_time );
+							}
+
+							// Restore first event timestamp
+							$event_start_timestamp = strtotime( $recurring_event_date_start );
+
+						} else {
+
+							$event_start_timestamp = strtotime( $recurring_event_date_start );
+							$start_time = date( 'His', $event_start_timestamp );
+							$event_end_timestamp = $event_start_timestamp + $duration;
+							$end_time = date( 'His', $event_end_timestamp );
+							if ( 8 == strlen( $event['DTSTART'] ) ) {
+								$exdate_compare = date( 'Ymd', $event_start_timestamp );
+							} else {
+								$exdate_compare = date( 'Ymd\THis', $event_start_timestamp );
+							}
+
+							if ( $event_end_timestamp > $current && $event_start_timestamp < $until && $count_counter <= $rrule_count && $event_start_timestamp >= $date_from_ics && ! in_array( $exdate_compare, $exdates ) ) {
+								if ( 8 == strlen( $event['DTSTART'] ) ) {
+									$event['DTSTART'] = date( 'Ymd', $event_start_timestamp );
+									$event['DTEND'] = date( 'Ymd', $event_end_timestamp );
+								} else {
+									$event['DTSTART'] = date( 'Ymd\T', $event_start_timestamp ) . $start_time;
+									$event['DTEND'] = date( 'Ymd\T', $event_end_timestamp ) . $end_time;
+								}
+								if ( $this->timezone->getName() && 8 != strlen( $event['DTSTART'] ) ) {
+									try {
 										$adjusted_time = new DateTime( $event['DTSTART'], new DateTimeZone( $this->timezone->getName() ) );
 										$adjusted_time->setTimeZone( new DateTimeZone( 'UTC' ) );
 										$event['DTSTART'] = $adjusted_time->format('Ymd\THis');
 
-										$adjusted_time = new DateTime( $event['DTEND'], new DateTimeZone( $this->timezone->getName() ) );
-										$adjusted_time->setTimeZone( new DateTimeZone( 'UTC' ) );
-										$event['DTEND'] = $adjusted_time->format('Ymd\THis');
+										$event['DTEND'] = date( 'Ymd\THis', strtotime( $event['DTSTART'] ) + $duration );
+									} catch ( Exception $e ) {
+										// Invalid argument to DateTime
 									}
-
-									$upcoming[] = $event;
-									$count_counter++;
-								} elseif ( in_array( $day, $bydays ) && $count_counter <= $rrule_count ) {
-									$count_counter++;
-								} else {
-									$event['DTSTART'] = $byday_event_date_start;
-									$event['DTEND'] = $byday_event_date_end;
-								}
-								// Move forward a day
-								if ( 8 == strlen( $event['DTSTART'] ) ) {
-									$byday_event_date_start = date( "Ymd", strtotime( $byday_event_date_start . '+1 day' ) );
-									$byday_event_date_end = date( "Ymd", strtotime( $byday_event_date_end . '+1 day' ) );
-								} else {
-									$byday_event_date_start = date( "Ymd\THis", strtotime( $byday_event_date_start . '+1 day' ) );
-									$byday_event_date_end = date( "Ymd\THis", strtotime( $byday_event_date_end . '+1 day' ) );
-								}
-								$byday_event_start = strtotime( $byday_event_date_start );
-								$byday_event_end = strtotime( $byday_event_date_end );
-
-							}
-
-						} elseif ( isset( $rrule_array['BYDAY'] ) && $frequency === 'month' ) {
-							$byday_monthly_date_start = strtotime( $recurring_event_date_start );
-							$start_time = date( 'His', $byday_monthly_date_start );
-							$day_number = substr( $rrule_array['BYDAY'], 0, 1 );
-							$week_day = substr( $rrule_array['BYDAY'], 1 );
-							$day_cardinals = array( 1 => 'first', 2 => 'second', 3 => 'third', 4 => 'fourth', 5 => 'fifth' );
-							$weekdays = array( 'SU' => 'sunday', 'MO' => 'monday', 'TU' => 'tuesday', 'WE' => 'wednesday', 'TH' => 'thursday', 'FR' => 'friday', 'SA' => 'saturday' );
-							$event_start_desc = "{$day_cardinals[$day_number]} {$weekdays[$week_day]} of " . date( 'F', $byday_monthly_date_start ) . " " . date( 'Y', $byday_monthly_date_start ) . " " . date( 'H:i:s', $byday_monthly_date_start );
-							$event_start_timestamp = strtotime( $event_start_desc );
-							$exdate_compare = date( "Ymd", strtotime( $event_start_desc ) );
-
-							if ( $event_start_timestamp > $current && $event_start_timestamp < $until  && $count_counter <= $rrule_count && $event_start_timestamp >= $date_from_ics && $exdate_compare != $exdate ) {
-								if ( 8 == strlen( $event['DTSTART'] ) ) {
-									$event['DTSTART'] = date( 'Ymd', $event_start_timestamp );
-									$event['DTEND'] = date( 'Ymd', strtotime( $event['DTEND'] ) . "+" . $interval . " " . $frequency . "s" );
-								} else {
-									$event['DTSTART'] = date( 'Ymd\T', $event_start_timestamp ) . $start_time;
-									$event['DTEND'] = date( 'Ymd\THis', strtotime( $event['DTEND'] ) . "+" . $interval . " " . $frequency . "s" );
-								}
-								if ( $this->timezone->getName() && 8 != strlen( $event['DTSTART'] ) ) {
-									$adjusted_time = new DateTime( $event['DTSTART'], new DateTimeZone( $this->timezone->getName() ) );
-									$adjusted_time->setTimeZone( new DateTimeZone( 'UTC' ) );
-									$event['DTSTART'] = $adjusted_time->format('Ymd\THis');
-
-									$adjusted_time = new DateTime( $event['DTEND'], new DateTimeZone( $this->timezone->getName() ) );
-									$adjusted_time->setTimeZone( new DateTimeZone( 'UTC' ) );
-									$event['DTEND'] = $adjusted_time->format('Ymd\THis');
 								}
 								$upcoming[] = $event;
 								$count_counter++;
-							} else {
-								if ( 8 == strlen( $event['DTSTART'] ) ) {
-									$event['DTSTART'] = date( 'Ymd', $event_start_timestamp );
-									$event['DTEND'] = date( 'Ymd', strtotime( $event['DTEND'] ) . "+" . $interval . " " . $frequency . "s" );
-								} else {
-									$event['DTSTART'] = date( 'Ymd\T', $event_start_timestamp ) . $start_time;
-									$event['DTEND'] = date( 'Ymd\THis', strtotime( $event['DTEND'] ) . "+" . $interval . " " . $frequency . "s" );
-								}
 							}
-
-						} elseif ( $event_start >= $date_from_ics && $event_end >= $current && $event_end <= $until && $count_counter <= $rrule_count ) {
-							$event['DTSTART'] = $recurring_event_date_start;
-							$event['DTEND'] = $recurring_event_date_end;
-
-							$exdate_compare = date( "Ymd", strtotime( $recurring_event_date_start ) );
-
-							if ( $this->timezone->getName() ) {
-								$adjusted_time = new DateTime( $event['DTSTART'], new DateTimeZone( $this->timezone->getName() ) );
-								$adjusted_time->setTimeZone( new DateTimeZone( 'UTC' ) );
-								$event['DTSTART'] = $adjusted_time->format('Ymd\THis');
-
-								$adjusted_time = new DateTime( $event['DTEND'], new DateTimeZone( $this->timezone->getName() ) );
-								$adjusted_time->setTimeZone( new DateTimeZone( 'UTC' ) );
-								$event['DTEND'] = $adjusted_time->format('Ymd\THis');
-							}
-							if ( $exdate_compare != $exdate ) {
-								$upcoming[] = $event;
-								$count_counter++;
-							}
-						} else {
-							$event['DTSTART'] = $recurring_event_date_start;
-							$event['DTEND'] = $recurring_event_date_end;
-							$count_counter++;
 						}
+
+						// Set up next interval and reset $event['DTSTART'] and $event['DTEND'], keeping timestamps intact
+						$next_start_timestamp = strtotime( "+ {$interval} {$frequency}s", $event_start_timestamp );
+						if ( 8 == strlen( $event['DTSTART'] ) ) {
+							$event['DTSTART'] = date( 'Ymd', $next_start_timestamp );
+							$event['DTEND'] = date( 'Ymd', strtotime( $event['DTSTART'] ) + $duration );
+						} else {
+							$event['DTSTART'] = date( 'Ymd\THis', $next_start_timestamp );
+							$event['DTEND'] = date( 'Ymd\THis', strtotime( $event['DTSTART'] ) + $duration );
+						}
+
+						// Move recurring event date forward
+						$recurring_event_date_start = $event['DTSTART'];
 					}
 					$set_recurring_events[] = $uid;
 
 				}
 
 			} else {
-				// now process normal events
-				if ( $end >= $current )
+				// Process normal events
+				if ( strtotime( isset( $event['DTEND'] ) ? $event['DTEND'] : $event['DTSTART'] ) >= $current ) {
 					$upcoming[] = $event;
+				}
 			}
 		}
 		return $upcoming;
@@ -481,6 +510,25 @@ class iCalendarReader {
 					break;
 			}
 		}
+
+		// Filter for RECURRENCE-IDs
+		$recurrences = array();
+		if ( array_key_exists( 'VEVENT', $this->cal ) ) {
+			foreach ( $this->cal['VEVENT'] as $event ) {
+				if ( isset( $event['RECURRENCE-ID'] ) ) {
+					$recurrences[] = $event;
+				}
+			}
+			foreach ( $recurrences as $recurrence ) {
+				for ( $i = 0; $i < count( $this->cal['VEVENT'] ); $i++ ) {
+					if ( $this->cal['VEVENT'][ $i ]['UID'] == $recurrence['UID'] && ! isset( $this->cal['VEVENT'][ $i ]['RECURRENCE-ID'] ) ) {
+						$this->cal['VEVENT'][ $i ]['EXDATE'][] = $recurrence['RECURRENCE-ID'];
+						break;
+					}
+				}
+			}
+		}
+
 		return $this->cal;
 	}
 
@@ -541,38 +589,79 @@ class iCalendarReader {
 			}
 		}
 
-		if ( strpos( $keyword, ';' ) && ( stristr( $keyword, 'DTSTART' ) || stristr( $keyword, 'DTEND' ) ) ) {
+		/*
+		 * Some events have a specific timezone set in their start/end date,
+		 * and it may or may not be different than the calendar timzeone.
+		 * Valid formats include:
+		 * DTSTART;TZID=Pacific Standard Time:20141219T180000
+		 * DTEND;TZID=Pacific Standard Time:20141219T200000
+		 * EXDATE:19960402T010000Z,19960403T010000Z,19960404T010000Z
+		 * EXDATE;VALUE=DATE:2015050
+		 * EXDATE;TZID=America/New_York:20150424T170000
+		 * EXDATE;TZID=Pacific Standard Time:20120615T140000,20120629T140000,20120706T140000
+		 */
+
+		// Always store EXDATE as an array
+		if ( stristr( $keyword, 'EXDATE' ) ) {
+			$value = explode( ',', $value );
+		}
+
+		// Adjust DTSTART, DTEND, and EXDATE according to their TZID if set
+		if ( strpos( $keyword, ';' ) && ( stristr( $keyword, 'DTSTART' ) || stristr( $keyword, 'DTEND' ) || stristr( $keyword, 'EXDATE' ) || stristr( $keyword, 'RECURRENCE-ID' ) ) ) {
 			$keyword = explode( ';', $keyword );
 
-			/*
-			 * Some events have a specific timzeone set in their start/end date,
-			 * and it may or may not be different than the calendar timzeone.
-			 * I.e: "DTSTART;TZID=America/Los_Angeles:20130124T173000"
-			 * Since we're already adjusting the timezone on presentation, let's normalize all times to default UTC now
-			 */
-			if ( strpos( $keyword[1], "TZID") !== false ) {
-				$tzid = explode( '=', $keyword[1] );
-				$tzid = $this->timezone_from_string( $tzid[1] );
-				if ( $tzid ) {
-					$adjusted_time = new DateTime( $value, $tzid );
-					$adjusted_time->setTimeZone( new DateTimeZone( 'UTC' ) );
-					$value = $adjusted_time->format('Ymd\THis');
+			$tzid = false;
+			if ( 2 == count( $keyword ) ) {
+				$tparam = $keyword[1];
+
+				if ( strpos( $tparam, "TZID" ) !== false ) {
+					$tzid = $this->timezone_from_string( str_replace( 'TZID=', '', $tparam ) );
 				}
 			}
 
+			// Normalize all times to default UTC
+			if ( $tzid ) {
+				$adjusted_times = array();
+				foreach ( (array) $value as $v ) {
+					try {
+						$adjusted_time = new DateTime( $v, $tzid );
+						$adjusted_time->setTimeZone( new DateTimeZone( 'UTC' ) );
+						$adjusted_times[] = $adjusted_time->format('Ymd\THis');
+					} catch ( Exception $e ) {
+						// Invalid argument to DateTime
+						return;
+					}
+				}
+				$value = $adjusted_times;
+			}
+
+			// Format for adding to event
 			$keyword = $keyword[0];
+			if ( 'EXDATE' != $keyword ) {
+				$value = implode( (array) $value );
+			}
 		}
 
-		switch ($component) {
-		case 'VTODO':
-			$this->cal[ $component ][ $this->todo_count - 1 ][ $keyword ] = $value;
-			break;
-		case 'VEVENT':
-			$this->cal[ $component ][ $this->event_count - 1 ][ $keyword ] = $value;
-			break;
-		default:
-			$this->cal[ $component ][ $keyword ] = $value ;
-			break;
+		foreach ( (array) $value as $v ) {
+			switch ($component) {
+				case 'VTODO':
+					if ( 'EXDATE' == $keyword ) {
+						$this->cal[ $component ][ $this->todo_count - 1 ][ $keyword ][] = $v;
+					} else {
+						$this->cal[ $component ][ $this->todo_count - 1 ][ $keyword ] = $v;
+					}
+					break;
+				case 'VEVENT':
+					if ( 'EXDATE' == $keyword ) {
+						$this->cal[ $component ][ $this->event_count - 1 ][ $keyword ][] = $v;
+					} else {
+						$this->cal[ $component ][ $this->event_count - 1 ][ $keyword ] = $v;
+					}
+					break;
+				default:
+					$this->cal[ $component ][ $keyword ] = $v;
+					break;
+			}
 		}
 		$this->last_keyword = $keyword;
 	}
@@ -584,6 +673,10 @@ class iCalendarReader {
 	 * @return string
 	 */
 	public function escape( $string = '' ) {
+		// Unfold content lines per RFC 5545
+		$string = str_replace( "\n\t", '', $string );
+		$string = str_replace( "\n ", '', $string );
+
 		$allowed_html = array(
 			'a' => array(
 				'href'  => array(),
@@ -713,10 +806,12 @@ class iCalendarReader {
 		// multi-day
 		if ( ! $single_day ) {
 
-			if ( $all_day )
-				$end_date = date_i18n( $date_format, $end );
-			else
+			if ( $all_day ) {
+				// DTEND for multi-day events represents "until", not "including", so subtract one minute
+				$end_date = date_i18n( $date_format, $end - 60 );
+			} else {
 				$end_date = sprintf( $date_with_time, date_i18n( $date_format, $end ), date_i18n( $time_format, $end ) );
+			}
 
 			$date = sprintf( $two_dates, $date, $end_date );
 

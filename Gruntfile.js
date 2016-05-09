@@ -46,6 +46,7 @@ var admincss = [
 	'modules/omnisearch/omnisearch-jetpack',
 	'modules/post-by-email/post-by-email',
 	'modules/publicize/assets/publicize',
+	'modules/protect/protect-dashboard-widget',
 	'modules/sharedaddy/admin-sharing',
 	'modules/videopress/videopress-admin',
 	'modules/widget-visibility/widget-conditions/widget-conditions',
@@ -63,9 +64,13 @@ var frontendcss = [
 	'modules/shortcodes/css/slideshow-shortcode.css',
 	'modules/shortcodes/css/style.css', // TODO: Should be renamed to shortcode-presentations
 	'modules/subscriptions/subscriptions.css',
+	'modules/theme-tools/responsive-videos/responsive-videos.css',
+	'modules/theme-tools/social-menu/social-menu.css',
 	'modules/tiled-gallery/tiled-gallery/tiled-gallery.css',
 	'modules/widgets/wordpress-post-widget/style.css',
 	'modules/widgets/gravatar-profile.css',
+	'modules/widgets/goodreads/css/goodreads.css',
+	'modules/widgets/social-media-icons/style.css',
 	'modules/widgets/top-posts/style.css',
 	'modules/widgets/widgets.css' // TODO Moved to image-widget/style.css
 ];
@@ -112,6 +117,11 @@ module.exports = function(grunt) {
 				}
 			}
 		},
+		qunit: {
+			files: [
+				'tests/qunit/**/*.html'
+			]
+		},
 		phplint: {
 			files: [
 				'*.php',
@@ -122,6 +132,20 @@ module.exports = function(grunt) {
 				'views/**/*.php',
 				'3rd-party/*.php'
 			]
+		},
+		runPHPUnit: {
+			'default': {
+				cmd: 'phpunit',
+				args: ['-c', 'phpunit.xml.dist']
+			},
+		//	multisite: {
+		//		cmd: 'phpunit',
+		//		args: ['-c', 'tests/php.multisite.xml']
+		//	},
+			'external-http': {
+				cmd: 'phpunit',
+				args: ['-c', 'phpunit.xml.dist', '--group', 'external-http']
+			}
 		},
 		autoprefixer: {
 			options: {
@@ -429,6 +453,7 @@ module.exports = function(grunt) {
 	grunt.loadNpmTasks('grunt-shell');
 	grunt.loadNpmTasks('grunt-phplint');
 	grunt.loadNpmTasks('grunt-contrib-jshint');
+	grunt.loadNpmTasks('grunt-contrib-qunit');
 	grunt.loadNpmTasks('grunt-contrib-watch');
 	grunt.loadNpmTasks('grunt-wp-i18n');
 	grunt.loadNpmTasks('grunt-contrib-sass');
@@ -451,10 +476,7 @@ module.exports = function(grunt) {
 		'shell',
 		'search:DIR',
 		'phplint',
-		'jshint',
-
-		// Starts watch
-		'watch'
+		'jshint'
 	]);
 
 	grunt.registerTask('precommit', [
@@ -471,4 +493,22 @@ module.exports = function(grunt) {
 		'phplint',
 		'jshint'
 	]);
+
+	// Testing tasks.
+	grunt.registerTask('prePHPUnit', ['shell']);
+	grunt.registerMultiTask('runPHPUnit', function() {
+		grunt.util.spawn({
+			cmd: this.data.cmd,
+			args: this.data.args,
+			opts: {stdio: 'inherit'}
+		}, this.async());
+	});
+	grunt.registerTask('phpunit', 'Runs PHPUnit tests, including the external-http, and multisite tests.', ['prePHPUnit', 'runPHPUnit'] );
+
+	// Placeholder for multiple tests, e.g. PHPUnit and Qunit for JS.
+	grunt.registerTask('test', 'Runs all unit tasks.', 'phpunit');
+
+	// Travis CI tasks.
+	grunt.registerTask('travis:js', 'Runs Javascript Travis CI tasks.', [ 'jshint:src', 'qunit' ]);
+	grunt.registerTask('travis:phpunit', 'Runs PHPUnit Travis CI tasks.', 'phpunit');
 };
